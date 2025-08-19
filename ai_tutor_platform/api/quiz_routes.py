@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Dict, Any
 from ai_tutor_platform.modules.quiz.quiz_generator import generate_quiz
-from ai_tutor_platform.db.mongo_client import save_quiz_response
+from ai_tutor_platform.db.pg_client import save_quiz_response
 
 
 router = APIRouter()
@@ -45,3 +45,4 @@ def submit_quiz(submission: QuizSubmission):
         "total": len(submission.questions),
         "details": detailed_results
     }
+
