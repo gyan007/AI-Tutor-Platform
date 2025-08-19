@@ -31,6 +31,13 @@ def setup_db_schema():
             answer TEXT NOT NULL,
             timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(255) UNIQUE NOT NULL,
+            hashed_password VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE, -- Optional: if you want email-based login/recovery
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS file_doubts (
             id SERIAL PRIMARY KEY,
             user_id VARCHAR(255) NOT NULL,
@@ -188,3 +195,4 @@ def get_user_progress(user_id: str):
         if conn:
             cur.close()
             conn.close()
+
