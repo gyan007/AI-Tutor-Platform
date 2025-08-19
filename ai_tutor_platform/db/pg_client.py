@@ -3,13 +3,9 @@ import psycopg2
 from datetime import datetime
 from typing import List, Dict, Any
 
-# Environment variable for PostgreSQL URI
-# Example: postgresql://user:password@host:port/database_name
-# For Render, this will often be automatically set as DATABASE_URL
 PG_URI = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/ai_tutor_db")
 
 def get_db_connection():
-    """Establishes and returns a new PostgreSQL connection."""
     try:
         conn = psycopg2.connect(PG_URI)
         return conn
@@ -18,25 +14,26 @@ def get_db_connection():
         raise
 
 # Helper function to ensure database schema is set up (optional, but good for first run)
+# For production, prefer to run SQL scripts manually on your DB instance.
 def setup_db_schema():
     conn = None
     try:
         conn = get_db_connection()
         cur = conn.cursor()
         sql_schema = """
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(255) UNIQUE NOT NULL,
+            hashed_password VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS chat_history (
             id SERIAL PRIMARY KEY,
             user_id VARCHAR(255) NOT NULL,
             question TEXT NOT NULL,
             answer TEXT NOT NULL,
             timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(255) UNIQUE NOT NULL,
-            hashed_password VARCHAR(255) NOT NULL,
-            email VARCHAR(255) UNIQUE, -- Optional: if you want email-based login/recovery
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS file_doubts (
             id SERIAL PRIMARY KEY,
@@ -51,7 +48,7 @@ def setup_db_schema():
             user_id VARCHAR(255) NOT NULL,
             subject VARCHAR(255) NOT NULL,
             question TEXT NOT NULL,
-            options TEXT[] NOT NULL, -- Array of text for options
+            options TEXT[] NOT NULL,
             correct_answer VARCHAR(255) NOT NULL,
             user_answer VARCHAR(255) NOT NULL,
             is_correct BOOLEAN NOT NULL,
@@ -66,7 +63,7 @@ def setup_db_schema():
             accuracy NUMERIC(5, 2) NOT NULL,
             timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
-        -- Indexes for performance
+        -- Add indexes for performance
         CREATE INDEX IF NOT EXISTS idx_chat_user_id ON chat_history (user_id);
         CREATE INDEX IF NOT EXISTS idx_file_user_id ON file_doubts (user_id);
         CREATE INDEX IF NOT EXISTS idx_quiz_user_id ON quiz_attempts (user_id);
@@ -81,10 +78,9 @@ def setup_db_schema():
         raise
     finally:
         if conn:
+            cur.close()
             conn.close()
 
-# Call setup_db_schema once at application startup (e.g., in main.py or main_api.py)
-# Or, prefer to run SQL scripts manually on your DB instance.
 
 # ------------ Chat History ------------
 def save_chat(user_id: str, question: str, answer: str):
@@ -100,6 +96,32 @@ def save_chat(user_id: str, question: str, answer: str):
     except Exception as e:
         print(f"Error saving chat: {e}")
         conn.rollback()
+        raise
+    finally:
+        if conn:
+            cur.close()
+            conn.close()
+
+# NEW: Function to get chat history for a specific user
+def get_chat_history(user_id: str) -> List[Dict[str, Any]]:
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT question, answer, timestamp FROM chat_history WHERE user_id = %s ORDER BY timestamp ASC",
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        # Convert to a format suitable for Streamlit display
+        history = []
+        for row in rows:
+            # Assuming row is (question, answer, timestamp)
+            history.append(("user", row[0])) # User's question
+            history.append(("ai", row[1]))   # AI's answer
+        return history
+    except Exception as e:
+        print(f"Error fetching chat history: {e}")
         raise
     finally:
         if conn:
@@ -133,7 +155,6 @@ def save_quiz_response(user_id: str, subject: str, quiz: List[Dict[str, Any]], u
         conn = get_db_connection()
         cur = conn.cursor()
         for i, q in enumerate(quiz):
-            # PostgreSQL array type (TEXT[]) needs a Python list
             options_list = q.get("options", [])
             correct_ans = q.get("answer", "").strip().lower()
             user_ans = user_answers[i].strip().lower() if user_answers[i] is not None else ""
@@ -181,8 +202,7 @@ def get_user_progress(user_id: str):
         cur = conn.cursor()
         cur.execute("SELECT user_id, subject, score, total, accuracy, timestamp FROM user_progress WHERE user_id = %s ORDER BY timestamp ASC", (user_id,))
         rows = cur.fetchall()
-        
-        # Convert rows to list of dictionaries for compatibility with pandas/streamlit
+
         columns = [desc[0] for desc in cur.description]
         results = []
         for row in rows:
@@ -195,4 +215,3 @@ def get_user_progress(user_id: str):
         if conn:
             cur.close()
             conn.close()
-
