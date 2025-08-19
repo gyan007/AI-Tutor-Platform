@@ -17,12 +17,12 @@ app = FastAPI(
 
 # Optional: Run schema setup once at API startup (e.g., in a development environment)
 # In production on Render, you'd usually create the database and run these scripts once manually.
-# @app.on_event("startup")
-# async def startup_event():
-#     try:
-#         setup_db_schema()
-#     except Exception as e:
-#         print(f"Failed to set up database schema on API startup: {e}")
+@app.on_event("startup")
+async def startup_event():
+    try:
+        setup_db_schema()
+    except Exception as e:
+        print(f"Failed to set up database schema on API startup: {e}")
 
 # Optional: Redirect root to Streamlit UI
 @app.get("/", include_in_schema=False)
@@ -34,3 +34,4 @@ app.include_router(tutor_routes.router, prefix="/tutor", tags=["Tutor"])
 app.include_router(quiz_routes.router, prefix="/quiz", tags=["Quiz"])
 app.include_router(doubt_routes.router, prefix="/doubt", tags=["Doubt Solver"])
 app.include_router(tracker_routes.router, prefix="/tracker", tags=["Progress Tracker"])
+
