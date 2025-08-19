@@ -1,0 +1,49 @@
+ai_tutor_platform/                      ← Root project folder
+│
+├── ai_tutor_platform/                 ← Python package root
+│   ├── __init__.py
+│   ├── main.py                        ← Entrypoint (FastAPI/Gradio launcher)
+│   │
+│   ├── config/                        ← Config parser
+│   │   ├── __init__.py
+│   │   └── configuration.py          ← Loads values from config.ini
+│   │
+│   ├── data/
+│   │   ├── __init__.py
+│   │   └── config.ini                ← API keys, DB URI, global vars
+│   │
+│   ├── modules/                       ← Core modules (each is a package)
+│   │   ├── __init__.py
+│   │   │
+│   │   ├── tutor/
+│   │   │   ├── __init__.py
+│   │   │   └── chat_tutor.py         ← ChatGPT-style interaction
+│   │   │
+│   │   ├── quiz/
+│   │   │   ├── __init__.py
+│   │   │   └── quiz_generator.py     ← Subject-wise quiz generation
+│   │   │
+│   │   ├── doubt_solver/
+│   │   │   ├── __init__.py
+│   │   │   └── file_handler.py       ← File upload + QnA
+│   │   │
+│   │   └── tracker/
+│   │       ├── __init__.py
+│   │       └── progress_tracker.py  ← Tracks user performance
+│   │
+│   ├── api/                           ← FastAPI route handlers
+│   │   ├── __init__.py
+│   │   ├── tutor_routes.py
+│   │   ├── quiz_routes.py
+│   │   ├── doubt_routes.py
+│   │   └── tracker_routes.py
+│   │
+│   ├── llm/
+│   │   ├── __init__.py
+│   │   └── mistral_chain.py           ← LangChain + Mistral AI wrapper
+│
+├── requirements.txt                  ← Project dependencies
+├── README.md                         ← Project overview
+├── setup.py                          ← Python packaging metadata
+├── MANIFEST.in                       ← Package data (config.ini, etc.)
+└── .gitignore                        ← Git ignore file
