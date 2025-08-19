@@ -1,8 +1,10 @@
 from pymongo import MongoClient
 from datetime import datetime
+import os # Import os module
 
-# Connect to local MongoDB
-client = MongoClient("mongodb://localhost:27017")
+# Use an environment variable for the MongoDB URI
+mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/") # Fallback to local for dev
+client = MongoClient(mongo_uri)
 db = client["ai_tutor_platform_db"]
 
 # ------------ Tab 1: Chat History ------------
@@ -51,4 +53,5 @@ def save_user_progress(user_id: str, subject: str, score: int, total: int):
 
 def get_user_progress(user_id: str):
     return list(db.user_progress.find({"user_id": user_id}))
+
 
