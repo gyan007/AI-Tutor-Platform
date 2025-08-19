@@ -5,7 +5,7 @@ pydantic
 requests
 python-multipart
 streamlit
-psycopg2-binary  
+psycopg2-binary
 google-generativeai
 langchain-groq
 PyMuPDF
@@ -13,3 +13,5 @@ Pillow
 pytesseract
 altair
 pandas
+passlib[bcrypt] # <-- ADDED for password hashing
+python-jose[cryptography]
