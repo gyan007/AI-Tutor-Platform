@@ -30,7 +30,7 @@ if "user_id" not in st.session_state:
 
 st.title("🎓 AI Tutor Platform") # Updated emoji for title
 # Update the caption to reflect the use of Gemini
-st.caption("Powered by Google Gemini")
+st.caption("Powered by GROQ")
 
 # ------------------
 # Tabs Declaration
@@ -270,4 +270,5 @@ with tab4:
         st.markdown("#### Raw Progress Data")
         st.dataframe(df, use_container_width=True)
     else:
+
         st.info("Take some quizzes to track your progress! Your progress data will appear here.")
