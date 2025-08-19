@@ -180,6 +180,3 @@ Deploying this multi-service application involves separate considerations for ea
 
       * **Deploy**: Go to Streamlit Community Cloud, click "New app", select your repository and the main file (`ai_tutor_platform/main.py`), and deploy.
 
------
-
-This revised `README.md` now correctly reflects your non-Docker local setup and the specific Render/Streamlit Cloud deployment paths. Remember to replace all placeholder values with your actual credentials and URLs before pushing to GitHub.
