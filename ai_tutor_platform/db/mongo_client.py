@@ -1,9 +1,11 @@
 from pymongo import MongoClient
 from datetime import datetime
-import os # Import os module
+import os # <-- ADD THIS IMPORT
 
 # Use an environment variable for the MongoDB URI
-mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/") # Fallback to local for dev
+# The second argument to getenv is a fallback, useful for local development
+# Make sure to replace the placeholder with your actual Atlas URI for deployment.
+mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
 client = MongoClient(mongo_uri)
 db = client["ai_tutor_platform_db"]
 
@@ -53,5 +55,3 @@ def save_user_progress(user_id: str, subject: str, score: int, total: int):
 
 def get_user_progress(user_id: str):
     return list(db.user_progress.find({"user_id": user_id}))
-
-
