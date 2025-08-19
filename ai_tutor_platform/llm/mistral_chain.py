@@ -1,34 +1,41 @@
-from langchain_google_genai import ChatGoogleGenerativeAI # <<<--- THIS IS THE CORRECT IMPORT
-from langchain.schema import HumanMessage
-from ai_tutor_platform.config.configuration import Config
+import os
+from langchain_groq import ChatGroq # Correct import for Groq
+from langchain.prompts import ChatPromptTemplate
+from langchain.chains import LLMChain
+from ai_tutor_platform.config.configuration import config_instance # Import the config instance
 
-lobj_config = Config()
+class LLMChainWrapper:
+    def __init__(self):
+        # Load API key and model name from the centralized config
+        groq_api_key = config_instance.get_groq_api_key
+        groq_model_name = config_instance.get_groq_model_name
 
-def get_gemini_llm():
-    return ChatGoogleGenerativeAI(
-        model=lobj_config.get_llm_model(),
-        temperature=lobj_config.get_temperature(),
-    )
-def generate_response(prompt: str) -> str:
-    """
-    Generates a raw string response from the LLM without formatting (no markdown or code blocks).
-    """
-    llm = get_gemini_llm()
+        # Ensure API key is available
+        if not groq_api_key: # Check for empty string or None
+            raise ValueError("Groq API key is not set. Please set it in .streamlit/secrets.toml or config.ini for local dev.")
 
-    messages = [
-        HumanMessage(content=f"{prompt}")
-    ]
+        # Initialize ChatGroq with the API key and chosen model
+        self.llm = ChatGroq(
+            temperature=0.7, # Default temperature, can be made configurable if needed
+            groq_api_key=groq_api_key,
+            model_name=groq_model_name
+        )
+        
+        # Define a flexible prompt template
+        self.prompt_template = ChatPromptTemplate.from_messages([
+            ("system", "You are an AI tutor designed to help students learn and solve problems."),
+            ("user", "{question}")
+        ])
+        
+        # Combine the prompt and LLM into a chain
+        self.chain = self.prompt_template | self.llm
 
-    try:
-        response = llm.invoke(messages)
-        cleaned = response.content.strip()
-
-        # Keep the cleaning logic as Gemini models can also output markdown/code blocks
-        if cleaned.startswith("```"):
-            # Remove triple backticks and optional 'json'
-            cleaned = cleaned.lstrip("`").lstrip("json").strip()
-            cleaned = cleaned.rstrip("`").strip()
-
-        return cleaned
-    except Exception as e:
-        return f"[ERROR] {str(e)}"
+    def generate_response(self, prompt: str) -> str:
+        """
+        Generates a raw string response from the LLM without formatting (no markdown or code blocks).
+        """
+        try:
+            response = self.chain.invoke({"question": prompt})
+            return response.content.strip()
+        except Exception as e:
+            return f"[ERROR] {str(e)}"
