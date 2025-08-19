@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from ai_tutor_platform.db.mongo_client import save_user_progress, get_user_progress
+from ai_tutor_platform.db.pg_client import save_user_progress, get_user_progress
 
 router = APIRouter()
 
@@ -22,3 +22,4 @@ def save_score(data: ScoreInput):
 def fetch_progress(query: UserQuery):
     progress = get_user_progress(query.user_id)
     return {"progress": progress}
+
