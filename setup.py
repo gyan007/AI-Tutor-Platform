@@ -4,7 +4,7 @@ setup(
     name="ai_tutor_platform",
     version="1.0.0",
     author="Gyan Thakur",
-    description="An AI-powered tutoring platform using FastAPI, LangChain, and Mistral via LM Studio.",
+    description="An AI-powered tutoring platform using FastAPI, LangChain, and Groq API for LLM inference.", # <-- Updated description
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/your_username/ai_tutor_platform",
@@ -25,6 +25,11 @@ setup(
         "python-multipart",
         "requests",
         "pymongo",
-        "google-generativeai"
+        "langchain-groq",   
+        "PyMuPDF",          
+        "Pillow",           
+        "pytesseract",       
+        "altair",           
+        "pandas"            
     ]
 )
