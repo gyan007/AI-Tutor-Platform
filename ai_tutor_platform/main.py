@@ -7,11 +7,20 @@ import uuid
 import os
 import requests
 
-from ai_tutor_platform.modules.tutor.chat_tutor import ask_tutor
-from ai_tutor_platform.modules.doubt_solver.file_handler import solve_doubt_from_file
-from ai_tutor_platform.modules.quiz.quiz_generator import generate_quiz
+# Import extract_text_from_file for local text extraction
+from ai_tutor_platform.modules.doubt_solver.file_handler import extract_text_from_file 
+
+# No direct calls to ask_tutor, solve_doubt_from_file, generate_quiz from main.py anymore
+# All these interactions go via FastAPI
+# from ai_tutor_platform.modules.tutor.chat_tutor import ask_tutor
+# from ai_tutor_platform.modules.doubt_solver.file_handler import solve_doubt_from_file
+# from ai_tutor_platform.modules.quiz.quiz_generator import generate_quiz
+
 from ai_tutor_platform.db.pg_client import (
-    save_chat, save_file_doubt, save_quiz_response, get_user_progress # get_user_progress is crucial here
+    # These are now mostly called by FastAPI backend, not directly by Streamlit
+    # save_chat, save_file_doubt, save_quiz_response, save_user_progress,
+    get_user_progress, # Still used directly by Streamlit's progress tracker (temporarily, better via API)
+    get_chat_history # NEW: Used directly by Streamlit to fetch history initially
 )
 
 st.set_page_config(page_title="AI Tutor Platform", layout="wide")
@@ -28,7 +37,7 @@ if "username" not in st.session_state:
     st.session_state.username = None
 if "access_token" not in st.session_state:
     st.session_state.access_token = None
-if "token_type" not in st.session_state: # Added token_type
+if "token_type" not in st.session_state:
     st.session_state.token_type = None
 # IMPORTANT: Initialize chat_history as a dictionary keyed by username
 if "chat_history_by_user" not in st.session_state:
@@ -37,7 +46,7 @@ if "quiz_questions" not in st.session_state:
     st.session_state.quiz_questions = []
 if "quiz_submitted" not in st.session_state:
     st.session_state.quiz_submitted = False
-if "current_quiz_selections" not in st.session_state: # To persist quiz selections
+if "current_quiz_selections" not in st.session_state:
     st.session_state.current_quiz_selections = {}
 
 
@@ -75,28 +84,28 @@ if not st.session_state.logged_in:
                             st.session_state.token_type = token_data["token_type"]
 
                             # --- FETCH PREVIOUS DATA ON LOGIN ---
-                            # Fetch existing chat history for this user from DB
-                            # Note: The /tutor/ask route *saves* to DB, but you need a /tutor/history endpoint
-                            # to *fetch* it. For now, let's assume `save_chat` is sufficient.
-                            # If you need to *display* old chats, you'd need a `get_chat_history` function
-                            # in pg_client and a corresponding FastAPI route.
-                            # For simplicity, we'll initialize chat_history for the user here,
-                            # and any new chats will be added. To load old chats, you'd call
-                            # a DB function here. (See proposed new function below)
-
-                            # Here, we will simulate loading existing chat from DB, assuming a new DB function exists.
-                            # If `get_chat_history` doesn't exist, remove this part or create it.
-                            # For now, it initializes an empty list for the user if none exists.
-                            if username_login not in st.session_state.chat_history_by_user:
-                                st.session_state.chat_history_by_user[username_login] = []
-                            
-                            # You would ideally fetch past chats here. Example:
-                            # past_chats_response = requests.get(f"{API_BASE_URL}/tutor/history", headers=get_auth_headers())
-                            # if past_chats_response.status_code == 200:
-                            #     st.session_state.chat_history_by_user[username_login] = past_chats_response.json().get('history', [])
-                            # else:
-                            #     st.warning("Could not load past chat history.")
-                            # For now, without a specific API endpoint to fetch all chats, we proceed with current logic.
+                            # Fetch existing chat history for this user from DB via API
+                            try:
+                                # Call the new /tutor/history endpoint
+                                past_chats_response = requests.get(
+                                    f"{API_BASE_URL}/tutor/history",
+                                    headers=get_auth_headers()
+                                )
+                                if past_chats_response.status_code == 200:
+                                    fetched_history_raw = past_chats_response.json().get('history', [])
+                                    # Convert list of dicts from API to list of tuples for Streamlit's internal display
+                                    st.session_state.chat_history_by_user[username_login] = [
+                                        (item['role'], item['message']) for item in fetched_history_raw
+                                    ]
+                                else:
+                                    st.warning(f"Could not load past chat history: {past_chats_response.status_code} - {past_chats_response.json().get('detail', 'Unknown error')}")
+                                    st.session_state.chat_history_by_user[username_login] = [] # Initialize empty
+                            except requests.exceptions.ConnectionError:
+                                st.warning("Could not connect to API to fetch past chat history. Backend might be down.")
+                                st.session_state.chat_history_by_user[username_login] = [] # Initialize empty
+                            except Exception as e:
+                                st.warning(f"An error occurred loading past chat history: {e}")
+                                st.session_state.chat_history_by_user[username_login] = [] # Initialize empty
 
 
                             st.success(f"Welcome, {username_login}!")
@@ -144,10 +153,9 @@ else: # User is logged in, show main app content
         st.session_state.username = None
         st.session_state.access_token = None
         st.session_state.token_type = None
-        # Don't clear chat_history_by_user entirely, just for this user if desired
-        # Or if you want to clear current user's chat, do:
+        # You can choose to clear the current user's chat history from session state on logout
         # if st.session_state.username in st.session_state.chat_history_by_user:
-        #     st.session_state.chat_history_by_user[st.session_state.username] = []
+        #     del st.session_state.chat_history_by_user[st.session_state.username]
         st.rerun()
 
     # ------------------
@@ -177,11 +185,12 @@ else: # User is logged in, show main app content
 
                         if response_api.status_code == 200:
                             response_data = response_api.json().get("response", "No response from AI.")
-                            # Ensure the current user's chat history list exists
+                            # Ensure the current user's chat history list exists in session state
                             if st.session_state.username not in st.session_state.chat_history_by_user:
                                 st.session_state.chat_history_by_user[st.session_state.username] = []
                             st.session_state.chat_history_by_user[st.session_state.username].append(("user", user_input))
                             st.session_state.chat_history_by_user[st.session_state.username].append(("ai", response_data))
+                            # DB saving is handled by the FastAPI backend
                         else:
                             st.error(f"Error from AI Tutor: {response_api.status_code} - {response_api.json().get('detail', 'Unknown error')}")
                     except requests.exceptions.ConnectionError:
@@ -195,7 +204,8 @@ else: # User is logged in, show main app content
         current_user_chat_history = st.session_state.chat_history_by_user.get(st.session_state.username, [])
         if current_user_chat_history:
             st.markdown("#### Conversation History")
-            for role, msg in reversed(current_user_chat_history): # Iterate through current user's history
+            # Display in reverse order to show latest messages at the bottom
+            for role, msg in reversed(current_user_chat_history):
                 if role == "user":
                     st.markdown(f"**👤 You:** {msg}")
                 else:
@@ -216,69 +226,28 @@ else: # User is logged in, show main app content
 
         if st.button("Solve Doubt"):
             if uploaded_file and file_question.strip():
+                # Save uploaded file to a temporary location
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
                     tmp_file.write(uploaded_file.read())
                     tmp_file_path = tmp_file.name
 
                 with st.spinner("Processing file..."):
                     try:
-                        # Assuming solve_doubt_from_file handles LLM internally for now.
-                        # It will save directly to DB using current_user.username
-                        answer = solve_doubt_from_file(tmp_file_path, file_question)
-
-                        st.success("Answer:")
-                        st.write(answer)
-                        # DB saving for file doubt is handled by FastAPI now if that route is used.
-                        # If solve_doubt_from_file function itself is directly saving,
-                        # you need to ensure pg_client.save_file_doubt is called.
-                        # As per updated API routes, FastAPI backend will handle save_file_doubt.
-                        # So, this `save_file_doubt` call is likely redundant if API is used for this feature.
-                        # The client should call the FastAPI endpoint /doubt/solve, which then calls solve_doubt and save_file_doubt.
-                        # For now, let's keep it calling the API if you intend to move file logic to API:
+                        # 1. Extract text locally using file_handler function
+                        extracted_text = extract_text_from_file(tmp_file_path)
                         
-                        # Proposed change for /doubt/solve to use FastAPI
-                        # For FastAPI to process the file, you'd send the file bytes to FastAPI
-                        # For simplicity, if solve_doubt_from_file is still called directly in Streamlit
-                        # It needs to save to DB.
-                        
-                        # Option 1: Continue direct local execution, then save to DB (less ideal for API)
-                        # save_file_doubt(st.session_state.username, uploaded_file.name, file_question, answer)
-                        
-                        # Option 2: Send the text and question to the FastAPI /doubt/solve endpoint
-                        # This would mean `solve_doubt_from_file` should be adapted to be a client function.
-                        # For now, we'll keep the direct `solve_doubt_from_file` call, which might already call LLM.
-                        # If you want to use the API route for doubt, the logic here needs to change to:
-                        # response_api = requests.post(f"{API_BASE_URL}/doubt/solve", headers=get_auth_headers(),
-                        #                             json={"file_name": uploaded_file.name, "context": extracted_text, "question": file_question})
-                        # Then save_file_doubt would happen on backend.
-                        # For now, assuming solve_doubt_from_file internally calls LLM and saves to DB.
-                        # But wait, your API /doubt/solve calls `solve_doubt` then `save_file_doubt`.
-                        # So Streamlit needs to call `/doubt/solve`. This means `file_handler.py` needs to be
-                        # restructured to separate text extraction from LLM call.
-
-                        # Let's assume you pass text to backend for consistency:
-                        extracted_text = solve_doubt_from_file(tmp_file_path, file_question) # This currently runs LLM directly
-                        # You want to call the API, not direct `solve_doubt_from_file` if it's the backend's job.
-                        # Let's assume `solve_doubt_from_file` returns just extracted text for now, or just the answer.
-                        
-                        # This part needs clarification: Does `solve_doubt_from_file` (your local function)
-                        # call the LLM and DB, or just extract text?
-                        # Based on `doubt_routes.py`, `solve_doubt` is on backend, called by API.
-                        # So, Streamlit should do:
-                        # 1. Extract text locally.
-                        # 2. Send text + question to FastAPI's `/doubt/solve` endpoint.
-
-                        # REVISION FOR DOUBT SOLVER:
-                        # Assuming `extract_text_from_file` is local, and `solve_doubt` is on the backend.
-                        from ai_tutor_platform.modules.doubt_solver.file_handler import extract_text_from_file # Import extraction
-                        
-                        extracted_text = extract_text_from_file(tmp_file_path) # Extract text locally
-                        if "[ERROR]" in extracted_text:
-                            st.error(extracted_text)
+                        if "[ERROR]" in extracted_text: # Check for errors from extraction
+                            st.error(f"File extraction error: {extracted_text}")
                         else:
+                            # 2. Send extracted text and question to FastAPI's /doubt/solve endpoint
                             response_api = requests.post(f"{API_BASE_URL}/doubt/solve",
                                 headers=get_auth_headers(),
-                                json={"file_name": uploaded_file.name, "context": extracted_text, "question": file_question})
+                                json={
+                                    "file_name": uploaded_file.name,
+                                    "context": extracted_text,
+                                    "question": file_question
+                                }
+                            )
                             
                             if response_api.status_code == 200:
                                 answer = response_api.json().get("answer", "No answer from AI.")
@@ -290,9 +259,10 @@ else: # User is logged in, show main app content
                     except requests.exceptions.ConnectionError:
                         st.error("Could not connect to the API. Make sure the backend is running.")
                     except Exception as e:
-                        st.error(f"An error occurred: {e}")
+                        st.error(f"An error occurred during doubt solving: {e}")
                 
-                os.unlink(tmp_file_path) # Clean up temp file
+                # Clean up the temporary file after processing
+                os.unlink(tmp_file_path)
             else:
                 st.warning("Please upload a file and enter a question.")
 
@@ -314,7 +284,7 @@ else: # User is logged in, show main app content
 
                     if response_api.status_code == 200:
                         quiz = response_api.json().get("quiz", [])
-                        if quiz and "question" in quiz[0] and "[ERROR]" in quiz[0]["question"]:
+                        if quiz and isinstance(quiz, list) and quiz and "question" in quiz[0] and "[ERROR]" in quiz[0]["question"]:
                             st.error(quiz[0]["question"])
                             st.session_state.quiz_questions = []
                             st.session_state.quiz_submitted = False
@@ -332,36 +302,40 @@ else: # User is logged in, show main app content
         if st.session_state.quiz_questions:
             if not st.session_state.quiz_submitted:
                 st.subheader("📚 Answer the Questions")
-
+                
                 if "current_quiz_selections" not in st.session_state:
                     st.session_state.current_quiz_selections = {f"quiz_q_{i}": None for i in range(len(st.session_state.quiz_questions))}
 
                 for i, q in enumerate(st.session_state.quiz_questions):
                     st.markdown(f"**Q{i + 1}: {q['question']}**")
                     options = q["options"]
-
+                    
                     if not isinstance(options, list) or len(options) != 4 or not all(isinstance(opt, str) for opt in options):
                         st.error(f"Invalid options for Q{i+1}. Please regenerate quiz. Raw options: {options}")
-                        continue
+                        # Optionally, clear quiz questions if invalid structure to prevent further errors
+                        st.session_state.quiz_questions = []
+                        break # Exit loop if invalid options found
 
                     selected_option = st.radio(
                         f"Your answer for Q{i + 1}:",
                         options,
-                        index=options.index(st.session_state.current_quiz_selections[f"quiz_q_{i}"]) if st.session_state.current_quiz_selections[f"quiz_q_{i}"] in options else None,
+                        # Set index to selected option if it's already in session state and is valid
+                        index=options.index(st.session_state.current_quiz_selections.get(f"quiz_q_{i}")) if st.session_state.current_quiz_selections.get(f"quiz_q_{i}") in options else None,
                         key=f"quiz_q_{i}"
                     )
                     st.session_state.current_quiz_selections[f"quiz_q_{i}"] = selected_option
 
 
                 if st.button("Submit Quiz", key="submit_quiz_button"):
-                    user_answers = [st.session_state.current_quiz_selections[f"quiz_q_{i}"] for i in range(len(st.session_state.quiz_questions))]
+                    user_answers = [st.session_state.current_quiz_selections.get(f"quiz_q_{i}") for i in range(len(st.session_state.quiz_questions))]
 
                     try:
                         response_api = requests.post(f"{API_BASE_URL}/quiz/submit",
                             headers=get_auth_headers(),
                             json={
-                                # user_id is passed as a string (username)
-                                "user_id": st.session_state.username, # FastAPI will get user from token, this `user_id` might be redundant but keeping for current API model compatibility
+                                # user_id is passed as a string (username). Backend extracts from token.
+                                # This `user_id` field here might be redundant but keeping for base model compatibility.
+                                "user_id": st.session_state.username, 
                                 "subject": subject,
                                 "questions": st.session_state.quiz_questions,
                                 "user_answers": user_answers
@@ -382,7 +356,6 @@ else: # User is logged in, show main app content
                                 st.markdown("---")
 
                             st.success(f"🏁 Final Score: **{submission_results['score']} / {submission_results['total']}**")
-                            # No need to save to session state score_history now, always fetch from DB
                         else:
                             st.error(f"Error submitting quiz: {response_api.status_code} - {response_api.json().get('detail', 'Unknown error')}")
                     except requests.exceptions.ConnectionError:
@@ -400,13 +373,10 @@ else: # User is logged in, show main app content
 
         progress_data_from_db = []
         try:
-            # The /tracker/progress route in FastAPI now gets user_id from token
-            # The request body can be empty or just a placeholder if the FastAPI route
-            # doesn't expect 'user_id' in body after authentication.
-            # Let's keep it as is, FastAPI will likely ignore it and use token's user_id.
+            # Send username in body, though backend uses token for primary user identification
             response_api = requests.post(f"{API_BASE_URL}/tracker/progress",
                 headers=get_auth_headers(),
-                json={"user_id": st.session_state.username}) # Sending username, though backend uses token
+                json={"user_id": st.session_state.username})
 
             if response_api.status_code == 200:
                 progress_data_from_db = response_api.json().get("progress", [])
