@@ -5,10 +5,11 @@ pydantic
 requests
 python-multipart
 streamlit
-pymongo
-langchain-groq 
-PyMuPDF 
-Pillow 
-pytesseract 
+psycopg2-binary  
+google-generativeai
+langchain-groq
+PyMuPDF
+Pillow
+pytesseract
 altair
 pandas
