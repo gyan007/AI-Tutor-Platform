@@ -6,13 +6,23 @@ from ai_tutor_platform.api import (
     doubt_routes,
     tracker_routes
 )
+# Update this import from mongo_client to pg_client
+# from ai_tutor_platform.db.pg_client import setup_db_schema # <-- ADDED if you want to run schema setup from API
 
 app = FastAPI(
     title="AI Tutoring Platform",
-    # Update the description to reflect the use of Gemini
     description="A FastAPI-powered tutoring platform using LangChain and Google Gemini.",
     version="1.0.0"
 )
+
+# Optional: Run schema setup once at API startup (e.g., in a development environment)
+# In production on Render, you'd usually create the database and run these scripts once manually.
+# @app.on_event("startup")
+# async def startup_event():
+#     try:
+#         setup_db_schema()
+#     except Exception as e:
+#         print(f"Failed to set up database schema on API startup: {e}")
 
 # Optional: Redirect root to Streamlit UI
 @app.get("/", include_in_schema=False)
