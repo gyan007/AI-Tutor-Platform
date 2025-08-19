@@ -6,4 +6,9 @@ requests
 python-multipart
 streamlit
 pymongo
-google-generativeai 
+langchain-groq 
+PyMuPDF 
+Pillow 
+pytesseract 
+altair
+pandas
