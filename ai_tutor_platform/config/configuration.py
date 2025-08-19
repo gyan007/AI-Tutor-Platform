@@ -3,36 +3,40 @@ import os
 
 class Config:
     def __init__(self):
-        # Construct the path to config.ini relative to the current file
-        # This assumes config.ini is in ai_tutor_platform/data/
-        # base_path will be C:\Users\gyant\Desktop\ai_tutor_platform\ai_tutor_platform
         base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config_path = os.path.join(base_path, "data", "config.ini")
 
         self.config = configparser.ConfigParser()
-        # Read the configuration file. If it doesn't exist, the config object will be empty.
         self.config.read(config_path)
 
     def get_llm_model(self):
-        # Get LLM model from config.ini, default to "gemini-pro"
-        return self.config["GENERAL"].get("llm_model", "gemini-pro")
+        # This can be used as a generic LLM model name, e.g., for general context
+        return self.config["GENERAL"].get("llm_model", "llama3-8b-8192") # Default to a common Groq model
 
     def get_temperature(self):
-        # Get temperature from config.ini, default to 0.7, ensure it's a float
         return float(self.config["GENERAL"].get("temperature", "0.7"))
 
     def get_api_base(self):
-        # Get API base URL from config.ini, default to Gemini's standard endpoint
-        # Remove the markdown link formatting from the default string
-        return self.config["GENERAL"].get("api_base", "https://generativelanguage.googleapis.com/")
+        # This might not be strictly needed for Groq as `ChatGroq` handles it internally,
+        # but keep it if other LLM clients might use it.
+        return self.config["GENERAL"].get("api_base", "https://api.groq.com/openai/v1")
 
-    def get_api_key(self):
-        # Prioritize fetching the API key from environment variables (GOOGLE_API_KEY)
-        # If not found in environment, then try to get it from config.ini
-        # If still not found, return None or an empty string, letting the LLM client handle the error
-        api_key_env = os.getenv("GROQ_API_KEY")
+    def get_groq_api_key(self): # Renamed for clarity to match Groq usage
+        # Prioritize fetching the API key from environment variables (GROQ_API_KEY)
+        # If not found, then try to get it from config.ini (less secure for production)
+        api_key_env = os.getenv("GROQ_API_KEY") # <-- Use GROQ_API_KEY environment variable
         if api_key_env:
             return api_key_env
         else:
+            return self.config["GENERAL"].get("api_key", None) # Fallback to config.ini for dev
 
-            return self.config["GENERAL"].get("api_key", None) # Default to None if not found
+    def get_groq_model_name(self): # Added specific method for Groq model name
+        # Prioritize environment variable for model name, or fallback to config.ini
+        model_name_env = os.getenv("GROQ_MODEL_NAME") # <-- Use GROQ_MODEL_NAME environment variable
+        if model_name_env:
+            return model_name_env
+        else:
+            return self.config["GENERAL"].get("llm_model", "llama3-8b-8192") # Fallback to config.ini, use a Groq model default
+
+# Create a single instance of the Config class to be imported throughout the app
+config_instance = Config()
