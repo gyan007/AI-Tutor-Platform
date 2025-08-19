@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any 
 from ai_tutor_platform.db.pg_client import save_quiz_response, save_user_progress  
 from ai_tutor_platform.api.auth_routes import get_current_user, User
+from ai_tutor_platform.modules.quiz.quiz_generator import generate_quiz
 
 router = APIRouter()
 
@@ -51,3 +52,4 @@ def submit_quiz(submission: QuizSubmission, current_user: User = Depends(get_cur
         "total": total_questions,
         "details": detailed_results
     }
+
