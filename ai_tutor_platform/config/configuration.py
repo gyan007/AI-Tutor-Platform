@@ -30,8 +30,9 @@ class Config:
         # Prioritize fetching the API key from environment variables (GOOGLE_API_KEY)
         # If not found in environment, then try to get it from config.ini
         # If still not found, return None or an empty string, letting the LLM client handle the error
-        api_key_env = os.getenv("GOOGLE_API_KEY")
+        api_key_env = os.getenv("GROQ_API_KEY")
         if api_key_env:
             return api_key_env
         else:
+
             return self.config["GENERAL"].get("api_key", None) # Default to None if not found
