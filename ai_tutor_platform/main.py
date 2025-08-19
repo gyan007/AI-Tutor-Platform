@@ -4,15 +4,20 @@ import json
 import pandas as pd
 import altair as alt
 import uuid
-import os  
+import os
+
 from ai_tutor_platform.modules.tutor.chat_tutor import ask_tutor
 from ai_tutor_platform.modules.doubt_solver.file_handler import solve_doubt_from_file
 from ai_tutor_platform.modules.quiz.quiz_generator import generate_quiz
-from ai_tutor_platform.db.mongo_client import (
-    save_chat, save_file_doubt, save_quiz_response, save_user_progress, get_user_progress
+
+# Update this import from mongo_client to pg_client
+from ai_tutor_platform.db.pg_client import ( # <-- CHANGED
+    save_chat, save_file_doubt, save_quiz_response, save_user_progress, get_user_progress,
+    setup_db_schema # <-- ADDED if you want to run schema setup from app
 )
 
 st.set_page_config(page_title="AI Tutor Platform", layout="wide")
+
 
 # -----------------------------
 # Session state initialization
@@ -272,3 +277,4 @@ with tab4:
     else:
 
         st.info("Take some quizzes to track your progress! Your progress data will appear here.")
+
