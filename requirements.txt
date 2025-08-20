@@ -13,5 +13,7 @@ Pillow
 pytesseract
 altair
 pandas
-passlib[bcrypt] # <-- ADDED for password hashing
+passlib
+bcrypt
 python-jose[cryptography]
+
