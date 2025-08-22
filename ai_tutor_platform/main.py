@@ -185,7 +185,7 @@ else:
                 st.session_state.chat_history_by_user[st.session_state.username] = []
             st.rerun()
 
-    ---
+ 
     
     with tab2:
         st.subheader("Upload File and Ask a Question")
@@ -230,7 +230,7 @@ else:
             else:
                 st.warning("Please upload a file and enter a question.")
 
-    ---
+   
 
     with tab3:
         st.subheader("📝 Generate a Subject Quiz")
@@ -324,7 +324,7 @@ else:
             else:
                 st.info("Quiz already submitted. Generate a new quiz to continue.")
 
-    ---
+   
     
     with tab4:
         st.subheader("Quiz Performance Over Time")
@@ -382,3 +382,4 @@ else:
             st.dataframe(df, use_container_width=True)
         else:
             st.info("Take some quizzes to track your progress! Your progress data will appear here.")
+
