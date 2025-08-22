@@ -7,30 +7,17 @@ import uuid
 import os
 import requests
 
-# Import extract_text_from_file for local text extraction
-from ai_tutor_platform.modules.doubt_solver.file_handler import extract_text_from_file 
-
-# No direct calls to ask_tutor, solve_doubt_from_file, generate_quiz from main.py anymore
-# All these interactions go via FastAPI
-# from ai_tutor_platform.modules.tutor.chat_tutor import ask_tutor
-# from ai_tutor_platform.modules.doubt_solver.file_handler import solve_doubt_from_file
-# from ai_tutor_platform.modules.quiz.quiz_generator import generate_quiz
+from ai_tutor_platform.modules.doubt_solver.file_handler import extract_text_from_file
 
 from ai_tutor_platform.db.pg_client import (
-    # These are now mostly called by FastAPI backend, not directly by Streamlit
-    # save_chat, save_file_doubt, save_quiz_response, save_user_progress,
-    get_user_progress, # Still used directly by Streamlit's progress tracker (temporarily, better via API)
-    get_chat_history # NEW: Used directly by Streamlit to fetch history initially
+    get_user_progress,
+    get_chat_history
 )
 
 st.set_page_config(page_title="AI Tutor Platform", layout="wide")
 
-# --- API Base URL ---
 API_BASE_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 
-# -----------------------------
-# Session state initialization
-# -----------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "username" not in st.session_state:
@@ -39,7 +26,6 @@ if "access_token" not in st.session_state:
     st.session_state.access_token = None
 if "token_type" not in st.session_state:
     st.session_state.token_type = None
-# IMPORTANT: Initialize chat_history as a dictionary keyed by username
 if "chat_history_by_user" not in st.session_state:
     st.session_state.chat_history_by_user = {}
 if "quiz_questions" not in st.session_state:
@@ -50,15 +36,11 @@ if "current_quiz_selections" not in st.session_state:
     st.session_state.current_quiz_selections = {}
 
 
-# Helper function to create authorization headers
 def get_auth_headers():
     if st.session_state.access_token and st.session_state.token_type:
         return {"Authorization": f"{st.session_state.token_type} {st.session_state.access_token}"}
     return {}
 
-# ------------------
-# Login/Signup Section (Before main app content)
-# ------------------
 if not st.session_state.logged_in:
     st.subheader("Welcome to AI Tutor Platform")
     auth_tab1, auth_tab2 = st.tabs(["Login", "Signup"])
@@ -74,7 +56,7 @@ if not st.session_state.logged_in:
                 if username_login and password_login:
                     try:
                         response = requests.post(f"{API_BASE_URL}/auth/token",
-                            data={"username": username_login, "password": password_login})
+                                                 data={"username": username_login, "password": password_login})
 
                         if response.status_code == 200:
                             token_data = response.json()
@@ -83,33 +65,29 @@ if not st.session_state.logged_in:
                             st.session_state.access_token = token_data["access_token"]
                             st.session_state.token_type = token_data["token_type"]
 
-                            # --- FETCH PREVIOUS DATA ON LOGIN ---
-                            # Fetch existing chat history for this user from DB via API
                             try:
-                                # Call the new /tutor/history endpoint
                                 past_chats_response = requests.get(
                                     f"{API_BASE_URL}/tutor/history",
                                     headers=get_auth_headers()
                                 )
                                 if past_chats_response.status_code == 200:
                                     fetched_history_raw = past_chats_response.json().get('history', [])
-                                    # Convert list of dicts from API to list of tuples for Streamlit's internal display
                                     st.session_state.chat_history_by_user[username_login] = [
                                         (item['role'], item['message']) for item in fetched_history_raw
                                     ]
                                 else:
                                     st.warning(f"Could not load past chat history: {past_chats_response.status_code} - {past_chats_response.json().get('detail', 'Unknown error')}")
-                                    st.session_state.chat_history_by_user[username_login] = [] # Initialize empty
+                                    st.session_state.chat_history_by_user[username_login] = []
                             except requests.exceptions.ConnectionError:
                                 st.warning("Could not connect to API to fetch past chat history. Backend might be down.")
-                                st.session_state.chat_history_by_user[username_login] = [] # Initialize empty
+                                st.session_state.chat_history_by_user[username_login] = []
                             except Exception as e:
                                 st.warning(f"An error occurred loading past chat history: {e}")
-                                st.session_state.chat_history_by_user[username_login] = [] # Initialize empty
+                                st.session_state.chat_history_by_user[username_login] = []
 
 
                             st.success(f"Welcome, {username_login}!")
-                            st.rerun() # Rerun to switch to the main app content
+                            st.rerun()
                         else:
                             st.error(f"Login failed: {response.json().get('detail', 'Unknown error')}")
                     except requests.exceptions.ConnectionError:
@@ -131,20 +109,24 @@ if not st.session_state.logged_in:
                 if username_signup and password_signup:
                     try:
                         response = requests.post(f"{API_BASE_URL}/auth/signup",
-                            json={"username": username_signup, "password": password_signup, "email": email_signup})
+                                                 json={"username": username_signup, "password": password_signup, "email": email_signup})
 
                         if response.status_code == 200:
                             st.success(f"User {username_signup} registered successfully! Please login.")
                         else:
-                            st.error(f"Signup failed: {response.json().get('detail', 'Unknown error')}")
+                            try:
+                                error_detail = response.json().get('detail', 'Unknown error')
+                                st.error(f"Signup failed: {error_detail}")
+                            except json.JSONDecodeError:
+                                st.error(f"Signup failed: Server returned an empty or invalid response.")
+                                
                     except requests.exceptions.ConnectionError:
                         st.error("Could not connect to the API. Make sure the backend is running.")
                     except Exception as e:
                         st.error(f"An error occurred during signup: {e}")
                 else:
                     st.warning("Please enter a username and password.")
-else: # User is logged in, show main app content
-
+else:
     st.title("🎓 AI Tutor Platform")
     st.caption(f"Powered by Groq | Logged in as: {st.session_state.username}")
 
@@ -153,14 +135,8 @@ else: # User is logged in, show main app content
         st.session_state.username = None
         st.session_state.access_token = None
         st.session_state.token_type = None
-        # You can choose to clear the current user's chat history from session state on logout
-        # if st.session_state.username in st.session_state.chat_history_by_user:
-        #     del st.session_state.chat_history_by_user[st.session_state.username]
         st.rerun()
 
-    # ------------------
-    # Tabs Declaration
-    # ------------------
     tab1, tab2, tab3, tab4 = st.tabs([
         "💬 Chat Tutor",
         "📂 Doubt from File",
@@ -168,9 +144,6 @@ else: # User is logged in, show main app content
         "📈 Progress Tracker"
     ])
 
-    # ----------------------------
-    # ✨ Tab 1: Chat Tutor
-    # ----------------------------
     with tab1:
         st.subheader("Chat with your AI Tutor")
         user_input = st.text_input("Ask something:", key="chat_input")
@@ -180,17 +153,15 @@ else: # User is logged in, show main app content
                 with st.spinner("Thinking..."):
                     try:
                         response_api = requests.post(f"{API_BASE_URL}/tutor/ask",
-                            headers=get_auth_headers(),
-                            json={"question": user_input})
+                                                     headers=get_auth_headers(),
+                                                     json={"question": user_input})
 
                         if response_api.status_code == 200:
                             response_data = response_api.json().get("response", "No response from AI.")
-                            # Ensure the current user's chat history list exists in session state
                             if st.session_state.username not in st.session_state.chat_history_by_user:
                                 st.session_state.chat_history_by_user[st.session_state.username] = []
                             st.session_state.chat_history_by_user[st.session_state.username].append(("user", user_input))
                             st.session_state.chat_history_by_user[st.session_state.username].append(("ai", response_data))
-                            # DB saving is handled by the FastAPI backend
                         else:
                             st.error(f"Error from AI Tutor: {response_api.status_code} - {response_api.json().get('detail', 'Unknown error')}")
                     except requests.exceptions.ConnectionError:
@@ -200,11 +171,9 @@ else: # User is logged in, show main app content
             else:
                 st.warning("Please enter a question.")
 
-        # Display chat history ONLY for the current user
         current_user_chat_history = st.session_state.chat_history_by_user.get(st.session_state.username, [])
         if current_user_chat_history:
             st.markdown("#### Conversation History")
-            # Display in reverse order to show latest messages at the bottom
             for role, msg in reversed(current_user_chat_history):
                 if role == "user":
                     st.markdown(f"**👤 You:** {msg}")
@@ -216,9 +185,8 @@ else: # User is logged in, show main app content
                 st.session_state.chat_history_by_user[st.session_state.username] = []
             st.rerun()
 
-    # ----------------------------
-    # 📁 Tab 2: Doubt Solver from File
-    # ----------------------------
+    ---
+    
     with tab2:
         st.subheader("Upload File and Ask a Question")
         uploaded_file = st.file_uploader("Choose file (PDF, TXT, JPG, PNG)", type=["pdf", "txt", "jpg", "jpeg", "png"])
@@ -226,28 +194,25 @@ else: # User is logged in, show main app content
 
         if st.button("Solve Doubt"):
             if uploaded_file and file_question.strip():
-                # Save uploaded file to a temporary location
                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp_file:
                     tmp_file.write(uploaded_file.read())
                     tmp_file_path = tmp_file.name
 
                 with st.spinner("Processing file..."):
                     try:
-                        # 1. Extract text locally using file_handler function
                         extracted_text = extract_text_from_file(tmp_file_path)
                         
-                        if "[ERROR]" in extracted_text: # Check for errors from extraction
+                        if "[ERROR]" in extracted_text:
                             st.error(f"File extraction error: {extracted_text}")
                         else:
-                            # 2. Send extracted text and question to FastAPI's /doubt/solve endpoint
                             response_api = requests.post(f"{API_BASE_URL}/doubt/solve",
-                                headers=get_auth_headers(),
-                                json={
-                                    "file_name": uploaded_file.name,
-                                    "context": extracted_text,
-                                    "question": file_question
-                                }
-                            )
+                                                         headers=get_auth_headers(),
+                                                         json={
+                                                             "file_name": uploaded_file.name,
+                                                             "context": extracted_text,
+                                                             "question": file_question
+                                                         }
+                                                         )
                             
                             if response_api.status_code == 200:
                                 answer = response_api.json().get("answer", "No answer from AI.")
@@ -261,14 +226,12 @@ else: # User is logged in, show main app content
                     except Exception as e:
                         st.error(f"An error occurred during doubt solving: {e}")
                 
-                # Clean up the temporary file after processing
                 os.unlink(tmp_file_path)
             else:
                 st.warning("Please upload a file and enter a question.")
 
-    # ----------------------------
-    # 📝 Tab 3: Quiz Generator
-    # ----------------------------
+    ---
+
     with tab3:
         st.subheader("📝 Generate a Subject Quiz")
 
@@ -279,8 +242,8 @@ else: # User is logged in, show main app content
             with st.spinner("Generating quiz..."):
                 try:
                     response_api = requests.post(f"{API_BASE_URL}/quiz/generate",
-                        headers=get_auth_headers(),
-                        json={"topic": subject, "num_questions": num_questions})
+                                                 headers=get_auth_headers(),
+                                                 json={"topic": subject, "num_questions": num_questions})
 
                     if response_api.status_code == 200:
                         quiz = response_api.json().get("quiz", [])
@@ -312,14 +275,12 @@ else: # User is logged in, show main app content
                     
                     if not isinstance(options, list) or len(options) != 4 or not all(isinstance(opt, str) for opt in options):
                         st.error(f"Invalid options for Q{i+1}. Please regenerate quiz. Raw options: {options}")
-                        # Optionally, clear quiz questions if invalid structure to prevent further errors
                         st.session_state.quiz_questions = []
-                        break # Exit loop if invalid options found
+                        break
 
                     selected_option = st.radio(
                         f"Your answer for Q{i + 1}:",
                         options,
-                        # Set index to selected option if it's already in session state and is valid
                         index=options.index(st.session_state.current_quiz_selections.get(f"quiz_q_{i}")) if st.session_state.current_quiz_selections.get(f"quiz_q_{i}") in options else None,
                         key=f"quiz_q_{i}"
                     )
@@ -331,15 +292,13 @@ else: # User is logged in, show main app content
 
                     try:
                         response_api = requests.post(f"{API_BASE_URL}/quiz/submit",
-                            headers=get_auth_headers(),
-                            json={
-                                # user_id is passed as a string (username). Backend extracts from token.
-                                # This `user_id` field here might be redundant but keeping for base model compatibility.
-                                "user_id": st.session_state.username, 
-                                "subject": subject,
-                                "questions": st.session_state.quiz_questions,
-                                "user_answers": user_answers
-                            })
+                                                     headers=get_auth_headers(),
+                                                     json={
+                                                         "user_id": st.session_state.username,
+                                                         "subject": subject,
+                                                         "questions": st.session_state.quiz_questions,
+                                                         "user_answers": user_answers
+                                                     })
 
                         if response_api.status_code == 200:
                             submission_results = response_api.json()
@@ -365,18 +324,16 @@ else: # User is logged in, show main app content
             else:
                 st.info("Quiz already submitted. Generate a new quiz to continue.")
 
-    # ----------------------------
-    # 📊 Tab 4: Progress Tracker
-    # ----------------------------
+    ---
+    
     with tab4:
         st.subheader("Quiz Performance Over Time")
 
         progress_data_from_db = []
         try:
-            # Send username in body, though backend uses token for primary user identification
             response_api = requests.post(f"{API_BASE_URL}/tracker/progress",
-                headers=get_auth_headers(),
-                json={"user_id": st.session_state.username})
+                                         headers=get_auth_headers(),
+                                         json={"user_id": st.session_state.username})
 
             if response_api.status_code == 200:
                 progress_data_from_db = response_api.json().get("progress", [])
