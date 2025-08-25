@@ -2,19 +2,38 @@ import os
 import psycopg2
 from datetime import datetime
 from typing import List, Dict, Any
+from psycopg2.pool import ThreadedConnectionPool
 
+# PostgreSQL connection string from environment variables
 PG_URI = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/ai_tutor_db")
 
+# Initialize a global connection pool
+# minconn: minimum number of connections to keep open
+# maxconn: maximum number of connections to allow
+# A ThreadedConnectionPool is suitable for multi-threaded applications like FastAPI
+try:
+    conn_pool = ThreadedConnectionPool(minconn=1, maxconn=10, dsn=PG_URI)
+    print("Database connection pool initialized.")
+except Exception as e:
+    print(f"Error initializing connection pool: {e}")
+    conn_pool = None
+
 def get_db_connection():
+    """Gets a connection from the pool."""
+    if conn_pool is None:
+        raise Exception("Database connection pool is not initialized.")
     try:
-        conn = psycopg2.connect(PG_URI)
-        return conn
+        return conn_pool.getconn()
     except Exception as e:
-        print(f"Error connecting to PostgreSQL: {e}")
+        print(f"Error getting connection from pool: {e}")
         raise
 
-# Helper function to ensure database schema is set up (optional, but good for first run)
-# For production, prefer to run SQL scripts manually on your DB instance.
+def put_db_connection(conn):
+    """Returns a connection to the pool."""
+    if conn_pool and conn:
+        conn_pool.putconn(conn)
+
+# Helper function to ensure database schema is set up (optional)
 def setup_db_schema():
     conn = None
     try:
@@ -79,8 +98,7 @@ def setup_db_schema():
     finally:
         if conn:
             cur.close()
-            conn.close()
-
+            put_db_connection(conn)
 
 # ------------ Chat History ------------
 def save_chat(user_id: str, question: str, answer: str):
@@ -95,14 +113,15 @@ def save_chat(user_id: str, question: str, answer: str):
         conn.commit()
     except Exception as e:
         print(f"Error saving chat: {e}")
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise
     finally:
         if conn:
             cur.close()
-            conn.close()
+            put_db_connection(conn)
 
-# NEW: Function to get chat history for a specific user
+# Function to get chat history for a specific user
 def get_chat_history(user_id: str) -> List[Dict[str, Any]]:
     conn = None
     try:
@@ -113,12 +132,10 @@ def get_chat_history(user_id: str) -> List[Dict[str, Any]]:
             (user_id,)
         )
         rows = cur.fetchall()
-        # Convert to a format suitable for Streamlit display
         history = []
         for row in rows:
-            # Assuming row is (question, answer, timestamp)
-            history.append(("user", row[0])) # User's question
-            history.append(("ai", row[1]))   # AI's answer
+            history.append({"role": "user", "message": row[0]})
+            history.append({"role": "ai", "message": row[1]})
         return history
     except Exception as e:
         print(f"Error fetching chat history: {e}")
@@ -126,7 +143,7 @@ def get_chat_history(user_id: str) -> List[Dict[str, Any]]:
     finally:
         if conn:
             cur.close()
-            conn.close()
+            put_db_connection(conn)
 
 # ------------ File-based Doubt ------------
 def save_file_doubt(user_id: str, filename: str, question: str, answer: str):
@@ -141,12 +158,13 @@ def save_file_doubt(user_id: str, filename: str, question: str, answer: str):
         conn.commit()
     except Exception as e:
         print(f"Error saving file doubt: {e}")
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise
     finally:
         if conn:
             cur.close()
-            conn.close()
+            put_db_connection(conn)
 
 # ------------ Quiz Answers ------------
 def save_quiz_response(user_id: str, subject: str, quiz: List[Dict[str, Any]], user_answers: List[str]):
@@ -167,12 +185,13 @@ def save_quiz_response(user_id: str, subject: str, quiz: List[Dict[str, Any]], u
         conn.commit()
     except Exception as e:
         print(f"Error saving quiz response: {e}")
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise
     finally:
         if conn:
             cur.close()
-            conn.close()
+            put_db_connection(conn)
 
 # ------------ User Progress ------------
 def save_user_progress(user_id: str, subject: str, score: int, total: int):
@@ -188,12 +207,13 @@ def save_user_progress(user_id: str, subject: str, score: int, total: int):
         conn.commit()
     except Exception as e:
         print(f"Error saving user progress: {e}")
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise
     finally:
         if conn:
             cur.close()
-            conn.close()
+            put_db_connection(conn)
 
 def get_user_progress(user_id: str):
     conn = None
@@ -214,4 +234,4 @@ def get_user_progress(user_id: str):
     finally:
         if conn:
             cur.close()
-            conn.close()
+            put_db_connection(conn)
